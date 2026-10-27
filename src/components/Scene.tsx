@@ -1,33 +1,41 @@
 import { PLOT_IDS, resultState } from '../../shared/actions.ts'
 import type { PlotId } from '../../shared/actions.ts'
-import { buildingWorks } from '../sim/engine.ts'
-import { heat, readPlot } from '../sim/interpret.ts'
-import type { City, Lens } from '../sim/types.ts'
-import { isPresent, phaseOf } from '../sim/world.ts'
+import { buildingWorks, currentWhisper, workFor } from '../sim/engine.ts'
+import { GROUND_LABEL } from '../sim/interpret.ts'
+import type { CharacterId, City } from '../sim/types.ts'
+import { visionFor } from '../sim/visions.ts'
+import { isPresent } from '../sim/world.ts'
 import { ConstructionArt, MarksArt, PlotArt } from './Art.tsx'
-import { P, RECTS, SQUARE, center, depth, pts, rectPts, wrap } from './geo.ts'
+import { ACCENT, Character, figureHeight, screenSpot } from './Character.tsx'
+import { P, RECTS, SQUARE, center, depth, pts, rectPts } from './geo.ts'
 
 interface Props {
   city: City
-  lens: Lens
-  focus: PlotId | null
-  selected: PlotId | null
-  onHover: (id: PlotId | null) => void
-  onSelect: (id: PlotId) => void
+  layers: boolean
+  selected: CharacterId | null
+  hover: CharacterId | null
+  tutorial: boolean
+  onPick: (id: CharacterId) => void
+  onHover: (id: CharacterId | null) => void
+  onBackground: () => void
 }
 
 const ORDER = [...PLOT_IDS].sort((a, b) => depth(RECTS[a]) - depth(RECTS[b]))
+const TRANSFORMING = new Set(['plant_garden', 'establish_shared_courtyard', 'add_play_space'])
 
-export function Scene({ city, lens, focus, selected, onHover, onSelect }: Props) {
+export function Scene({ city, layers, selected, hover, tutorial, onPick, onHover, onBackground }: Props) {
   const works = buildingWorks(city)
+  const looking = selected ?? hover
+  const vision = looking ? visionFor(city, looking) : null
+  // people who died this year are still drawn, once, as they leave
+  const people = city.people.filter((p) => isPresent(p, city.year) || p.diedYear === city.year)
+
   return (
-    <svg className={`scene lens-${lens}`} viewBox="-440 -215 1050 720" role="img" aria-label={`Kleiner Ilmplatz in ${city.year}, seen through the ${lens} lens`}>
+    <svg className={`scene ${layers ? "show-layers" : ""} ${vision ? "has-vision" : ""} ${selected ? `persp persp-${selected}` : ""}`} viewBox="-430 -190 1030 690" onClick={onBackground}
+      role="img" aria-label={`Kleiner Ilmplatz in ${city.year}`}>
       <defs>
         <pattern id="cobble" width="7" height="5" patternUnits="userSpaceOnUse" patternTransform="skewX(-30)">
           <circle cx="2" cy="2" r="0.9" className="cobble-dot" />
-        </pattern>
-        <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
-          <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
         </pattern>
       </defs>
 
@@ -38,60 +46,151 @@ export function Scene({ city, lens, focus, selected, onHover, onSelect }: Props)
           const p = city.plots[id]
           const r = RECTS[id]
           const work = works.find((w) => w.plot === id)
-          const transforming = work && (work.action === 'plant_garden' || work.action === 'establish_shared_courtyard' || work.action === 'add_play_space')
+          const transforming = work && TRANSFORMING.has(work.action)
           const progress = work ? (city.year - work.startYear) / (work.completionYear - work.startYear) : 0
           return (
-            <g key={id} className={`plot ${focus === id ? 'is-focus' : ''} ${selected === id ? 'is-selected' : ''}`}
-              onMouseEnter={() => onHover(id)} onMouseLeave={() => onHover(null)} onClick={() => onSelect(id)}>
-              <polygon className="hit" points={rectPts(r)} />
+            <g key={id} className="plot">
               {transforming
                 ? <ConstructionArt r={r} id={id} from={p.state} target={resultState(work.action, p.state)} progress={progress} />
                 : <PlotArt state={p.state} r={r} id={id} />}
               <MarksArt marks={p.marks} r={r} year={city.year} />
-              {work && !transforming && <PendingMark r={r} />}
-              <polygon className="outline" points={rectPts(r, 0, 2)} />
             </g>
           )
         })}
-        {lens === 'present' && heat(city) > 0.2 && ORDER.filter((id) => ['paved', 'parking', 'steps'].includes(city.plots[id].state)).map((id) => (
-          <polygon key={id} className="heat" style={{ opacity: heat(city) * 0.55 }} points={rectPts(RECTS[id])} />
-        ))}
       </g>
 
-      {lens === 'memory' && ORDER.map((id) => (
-        <g key={id} className="ghost ghost-memory">
-          {city.plots[id].layers.slice(0, -1).filter((l) => l.state !== city.plots[id].state).map((l) => (
-            <PlotArt key={l.year} state={l.state} r={RECTS[id]} id={id} />
-          ))}
-        </g>
-      ))}
+      {layers && <Palimpsest city={city} />}
 
-      {lens === 'palimpsest' && <Palimpsest city={city} />}
+      {vision && <VisionLayer city={city} vision={vision} />}
 
-      <People city={city} lens={lens} />
+      {works.map((w) => <WorkSign key={w.id} city={city} plot={w.plot as PlotId} start={w.startYear} end={w.completionYear}
+        label={w.action === 'plant_tree' ? 'a tree' : w.action === 'preserve_trace' ? 'a bronze trace' : GROUND_LABEL[resultState(w.action, city.plots[w.plot as PlotId].state)]} />)}
 
-      {works.map((w) => {
-        const r = RECTS[w.plot as PlotId]
-        const [x, y] = P(center(r)[0], center(r)[1], 70)
-        const done = city.year - w.startYear
-        const total = w.completionYear - w.startYear
+      {people.map((p) => {
+        const w = currentWhisper(city, p.id)
+        const indicator = !w ? null : workFor(city, w) ? '…' : '!'
         return (
-          <g key={w.id} className="work-tag" transform={`translate(${x},${y})`}>
-            <rect x={-62} y={-13} width={124} height={22} rx={2} />
-            <text textAnchor="middle" y={2}>{w.startYear} → {w.completionYear} · {done}/{total}</text>
-          </g>
+          <Character key={p.id} person={p} year={city.year}
+            selected={selected === p.id} hovered={hover === p.id} dim={!!selected && selected !== p.id}
+            indicator={indicator} ring={tutorial && p.id === 'mio'} passing={p.diedYear === city.year}
+            graduating={city.milestones.some((m) => m.personId === p.id && m.year === city.year && m.icon === '🎓')}
+            onPick={() => onPick(p.id)} onHover={(on) => onHover(on ? p.id : null)} />
         )
       })}
 
-      {lens !== 'palimpsest' && <Notes city={city} lens={lens} focus={focus ?? selected} />}
+      <MemorialAnchor city={city} selected={selected === "roth"} dim={!!selected && selected !== "roth"} onPick={() => onPick("roth")} />
+
+      <Popups city={city} />
     </svg>
   )
 }
 
-function PendingMark({ r }: { r: { x: number; y: number; w: number; d: number } }) {
+/** A translucent wish drawn onto real ground, tied to the person by a dotted thread. */
+function VisionLayer({ city, vision }: { city: City; vision: NonNullable<ReturnType<typeof visionFor>> }) {
+  const r = RECTS[vision.plot]
   const [cx, cy] = center(r)
-  const ring = Array.from({ length: 20 }, (_, i) => { const a = (i / 20) * Math.PI * 2; return [cx + Math.cos(a) * 26, cy + Math.sin(a) * 26, 0] as [number, number, number] })
-  return <polygon className="pending" points={pts(ring)} />
+  const [tx, ty] = P(cx, cy, 46)
+  const [hx, hy] = screenSpot(vision.personId)
+  const person = city.people.find((p) => p.id === vision.personId)!
+  const headY = hy - figureHeight(person, city.year) * 0.8
+  return (
+    <g className={`vision vision-${vision.personId}`} style={{ ['--accent' as string]: ACCENT[vision.personId] }}>
+      <g className="vision-art"><PlotArt state={vision.state} r={r} id={vision.plot} /></g>
+      <polygon className="vision-edge" points={rectPts(r, 0, 3)} />
+      <path className="vision-thread" d={`M ${hx} ${headY} Q ${(hx + tx) / 2} ${Math.min(headY, ty) - 60} ${tx} ${ty}`} />
+      <g transform={`translate(${tx},${ty})`}>
+        <g className="vision-tag">
+          <text textAnchor="middle">{person.name} {vision.verb}</text>
+        </g>
+      </g>
+    </g>
+  )
+}
+
+/** The daemon's building sign: what, how far, and when — always physical, always ochre. */
+function WorkSign({ city, plot, start, end, label }: { city: City; plot: PlotId; start: number; end: number; label: string }) {
+  const [cx, cy] = center(RECTS[plot])
+  const [x, y] = P(cx, cy, 78)
+  const progress = Math.min(1, (city.year - start) / (end - start))
+  const left = end - city.year
+  return (
+    <g transform={`translate(${x.toFixed(1)},${y.toFixed(1)})`} className="work-sign">
+      <line x1={0} y1={22} x2={0} y2={50} className="sign-post" />
+      <rect x={-70} y={-20} width={140} height={44} rx={6} className="sign-board" />
+      <text x={0} y={-5} textAnchor="middle" className="sign-title">🏗 {label}</text>
+      <rect x={-58} y={2} width={116} height={7} rx={3.5} className="sign-track" />
+      <rect x={-58} y={2} width={Math.max(4, 116 * progress)} height={7} rx={3.5} className="sign-fill" />
+      <text x={0} y={19} textAnchor="middle" className="sign-year">ready {end} · {left} yr{left === 1 ? '' : 's'} left</text>
+    </g>
+  )
+}
+
+/** Milestones and reactions float above heads for the year they happen. */
+function Popups({ city }: { city: City }) {
+  const ms = city.milestones.filter((m) => m.year === city.year)
+  const rs = city.reactions.filter((r) => r.year === city.year)
+  return (
+    <g className="popups">
+      {city.people.map((p) => {
+        const mine = [...ms.filter((m) => m.personId === p.id), ...rs.filter((r) => r.personId === p.id)]
+        if (!mine.length) return null
+        const [x, y] = screenSpot(p.id)
+        const h = figureHeight(p, city.year)
+        return (
+          <g key={p.id} transform={`translate(${x.toFixed(1)},${(y - h - 40).toFixed(1)})`}>
+            {mine.map((item, i) => {
+              const isReaction = 'mood' in item
+              const text = isReaction ? `${moodIcon(item.mood)} ${item.line}` : `${item.icon} ${item.text}`
+              const w = Math.min(250, text.length * 6.1 + 20)
+              const lines = isReaction && text.length > 40 ? splitTwo(text) : [text]
+              const hh = lines.length * 14 + 10
+              return (
+                <g key={item.id} transform={`translate(0,${-i * 40})`}>
+                  <g className={`pop ${isReaction ? `pop-reaction mood-${item.mood}` : 'pop-milestone'} ${'death' in item && item.death ? 'pop-death' : ''}`}>
+                    <rect x={-(lines.length > 1 ? 130 : w / 2)} y={-hh + 4} width={lines.length > 1 ? 260 : w} height={hh} rx={hh / 2 > 14 ? 12 : hh / 2} />
+                    {lines.map((l, k) => <text key={k} textAnchor="middle" y={-hh + 19 + k * 14}>{l}</text>)}
+                  </g>
+                </g>
+              )
+            })}
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
+/**
+ * After Frau Roth's death, her bench by the linden stands in for her: click it to revisit
+ * her last wish. It can never tell the daemon anything new.
+ */
+function MemorialAnchor({ city, selected, dim, onPick }: { city: City; selected: boolean; dim: boolean; onPick: () => void }) {
+  const roth = city.people.find((p) => p.id === 'roth')!
+  if (roth.diedYear === undefined || roth.diedYear >= city.year) return null
+  const r = RECTS.linden
+  const [x, y] = P(r.x + r.w - 16, r.y + 84, 0)
+  return (
+    <g transform={`translate(${x.toFixed(1)},${y.toFixed(1)})`}
+      className={`character memorial-anchor ch-roth ${selected ? 'is-selected' : ''} ${dim ? 'is-dim' : ''}`}
+      onClick={(e) => { e.stopPropagation(); onPick() }}
+      role="button" aria-label={`Frau Roth, ${roth.born}–${roth.diedYear}, in memory`} tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick() } }}>
+      <ellipse className="ch-halo" cx={0} cy={2} rx={34} ry={13} style={{ stroke: ACCENT.roth }} />
+      <rect className="ch-hit" x={-30} y={-34} width={60} height={46} />
+      <circle className="anchor" data-anchor="roth" cx={0} cy={-30} r={0.5} />
+      <g transform="translate(0,20)" className="ch-label memorial-label">
+        <rect x={-46} y={-8} width={92} height={13} rx={6.5} />
+        <text y={2} textAnchor="middle">🕯 Frau Roth</text>
+      </g>
+    </g>
+  )
+}
+
+export const moodIcon = (m: string) => ({ delighted: '♥', bittersweet: '…', surprised: '✦', mixed: '~', disrupted: '☁' } as Record<string, string>)[m] ?? '·'
+
+function splitTwo(t: string): string[] {
+  const mid = t.lastIndexOf(' ', Math.ceil(t.length / 2) + 4)
+  return mid > 0 ? [t.slice(0, mid), t.slice(mid + 1)] : [t]
 }
 
 /** Weimar-ish facades along the north and west edges. They never change; they are slower than the daemon. */
@@ -148,72 +247,15 @@ function Palimpsest({ city }: { city: City }) {
           const lift = (layers.length - 1 - i) * 30
           const [lx, ly] = P(r.x, r.y + r.d, 0)
           return (
-            <g key={`${id}${l.year}`} className="ghost ghost-sheet" transform={`translate(0,${-lift})`} style={{ animationDelay: `${i * 120}ms` }}>
-              <polygon className="sheet" points={rectPts(r)} />
-              <PlotArt state={l.state} r={r} id={id} />
-              <text className="sheet-year" x={lx - 4} y={ly - 4} textAnchor="end">{l.year}</text>
+            <g key={`${id}${l.year}`} transform={`translate(0,${-lift})`}>
+              <g className="ghost ghost-sheet">
+                <polygon className="sheet" points={rectPts(r)} />
+                <PlotArt state={l.state} r={r} id={id} />
+                <text className="sheet-year" x={lx - 4} y={ly - 4} textAnchor="end">{l.year}</text>
+              </g>
             </g>
           )
         })
-      })}
-    </g>
-  )
-}
-
-function People({ city, lens }: { city: City; lens: Lens }) {
-  const here = city.people.filter((p) => isPresent(p, city.year))
-  return (
-    <g className="people">
-      {here.map((p, i) => {
-        const w = city.whispers.find((x) => x.personId === p.id && x.resolvedYear === undefined && x.plot !== 'any')
-        const plot = (w?.plot as PlotId) ?? PLOT_IDS[(i * 3) % PLOT_IDS.length]
-        const r = RECTS[plot]
-        const ox = ((i * 37) % 60) - 30
-        const oy = ((i * 53) % 50) - 10
-        const [x, y] = P(r.x + r.w * 0.5 + ox, r.y + r.d - 18 + oy * 0.3, 0)
-        const pl = phaseOf(p, city.year).lens
-        const dim = lens !== 'ground' && lens !== 'palimpsest' && lens !== pl
-        return (
-          <g key={p.id} className={`person lens-${pl} ${dim ? 'dim' : ''}`} transform={`translate(${x},${y})`}>
-            <line x1={0} y1={0} x2={0} y2={-11} />
-            <circle cx={0} cy={-14} r={3.2} />
-            <text y={10} textAnchor="middle">{p.name}</text>
-          </g>
-        )
-      })}
-    </g>
-  )
-}
-
-function Notes({ city, lens, focus }: { city: City; lens: Lens; focus: PlotId | null }) {
-  return (
-    <g className={`notes notes-${lens}`}>
-      {ORDER.map((id) => {
-        const r = RECTS[id]
-        const [cx, cy] = center(r)
-        const [x, y] = P(cx, cy, 0)
-        const all = readPlot(lens, city.plots[id], city)
-        const notes = focus === id ? all : all.slice(0, 2)
-        let dy = 0
-        return (
-          <g key={id} transform={`translate(${x},${y})`} className={focus && focus !== id ? 'muted' : ''}>
-            {notes.map((n, i) => {
-              const lines = n.kind === 'label' ? [n.text.length > 44 && focus !== id ? n.text.slice(0, 43) + '…' : n.text] : wrap(n.text, 30).slice(0, focus === id ? 6 : 2)
-              if (n.kind !== 'label' && focus !== id && wrap(n.text, 30).length > 2) lines[1] = lines[1].replace(/\W*$/, '') + '…'
-              const h = lines.length * 13 + (n.by ? 12 : 0) + 8
-              const wpx = Math.max(...lines.map((l) => l.length), (n.by ?? '').length + 2) * (lens === 'possibility' ? 6.4 : 5.9) + 16
-              const top = dy
-              dy += h + 4
-              return (
-                <g key={i} className={`note note-${n.kind} ${n.faded ? 'faded' : ''}`} transform={`translate(${-wpx / 2},${top - 20})`}>
-                  <rect width={wpx} height={h} rx={2} />
-                  {lines.map((l, k) => <text key={k} x={8} y={14 + k * 13}>{l}</text>)}
-                  {n.by && <text className="by" x={8} y={14 + lines.length * 13}>— {n.by}</text>}
-                </g>
-              )
-            })}
-          </g>
-        )
       })}
     </g>
   )

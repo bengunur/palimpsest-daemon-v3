@@ -18,7 +18,7 @@ export function buildSnapshot(c: City) {
       heard: w.heardCount,
       firstHeard: w.firstHeard,
       lastHeard: w.lastHeard,
-      carriedByVisitor: w.carried,
+      toldByVisitor: w.told,
       alreadyBeingAnswered: inProgress.has(w.id),
     }))
     .sort((a, b) => Number(a.alreadyBeingAnswered) - Number(b.alreadyBeingAnswered) || b.heard - a.heard)

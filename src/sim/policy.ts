@@ -64,7 +64,7 @@ export function simulatedDecision(c: City): RawDecision {
         if (!sup.length) continue
         const plot = c.plots[pc.id]
         let score = 0
-        for (const w of sup) score += kindWeight(c, w) * (1 + Math.log2(w.heardCount + (w.carried ? 1 : 0)))
+        for (const w of sup) score += kindWeight(c, w) * (1 + Math.log2(w.heardCount + (w.told ? 1 : 0)))
         if (new Set(sup.map((w) => w.lens)).size > 1) score += 0.3
         let restoresYear: number | undefined
         if (spec.transforms) {
@@ -79,7 +79,8 @@ export function simulatedDecision(c: City): RawDecision {
           ? sup.filter((w) => w.kind === 'memory' && (isGone(c, w) || w.lastHeard < c.year - 1)).length
           : 0
         score += forgetting * c.weights.memory * 1.5
-        score += rand(c) * 0.2
+        if (sup.some((w) => w.told)) score += 0.75 // a told wish is louder, not decisive
+        score += rand(c) * 0.3
         candidates.push({ action, plot: pc.id, sup, score, restoresYear, forgetting })
       }
     }
@@ -108,7 +109,7 @@ export function simulatedDecision(c: City): RawDecision {
   }
 
   const top = [...best.sup].sort((a, b) => b.heardCount - a.heardCount)[0]
-  const heard = best.sup.reduce((n, w) => n + w.heardCount + (w.carried ? 1 : 0), 0)
+  const heard = best.sup.reduce((n, w) => n + w.heardCount + (w.told ? 1 : 0), 0)
   if (heard < 2) {
     return {
       noticed: `${quote(c, top)} Heard once, in ${top.firstHeard}.`,
@@ -155,6 +156,11 @@ export function simulatedDecision(c: City): RawDecision {
     reason = 'Heat is a need that will outlive everyone asking about it. A tree answers people not yet born.'
   } else {
     reason = `${spec.label[0].toUpperCase() + spec.label.slice(1)} at ${plotName} answers what has been said ${heard} times — not what was said loudest.`
+  }
+
+  const toldNow = openWhispers(c).filter((w) => w.told && c.toldYear[w.personId] === c.year && !inProgress.has(w.id))
+  if (toldNow.length && !toldNow.some((w) => best.sup.includes(w))) {
+    reason = `I heard ${personName(c, toldNow[0].personId)}. But ${reason[0].toLowerCase()}${reason.slice(1)}`
   }
 
   return { noticed, action: best.action, plotId: best.plot, durationYears, reason, utterance: pick(c, VOICE[best.action]) }

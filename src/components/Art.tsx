@@ -241,8 +241,28 @@ export function MarksArt({ marks, r, year }: { marks: Mark[]; r: Rect; year: num
           const age = Math.max(0, year - m.year)
           return <Tree key={i} x={r.x + r.w * fx} y={r.y + r.d * fy} s={0.35 + Math.min(1, age / 20) * 0.75} />
         }
+        if (m.kind === 'memorial') return <Memorial key={i} x={r.x + r.w - 34} y={r.y + 78} />
         return <Box key={i} x={r.x + r.w - 26 - i * 3} y={r.y + r.d - 14} w={14} d={6} h={10} m="bronze" />
       })}
+    </g>
+  )
+}
+
+/** Frau Roth's empty bench: her hat, a candle, a few flowers. */
+function Memorial({ x, y }: { x: number; y: number }) {
+  const hat = P(x + 12, y + 4, 12)
+  const candle = P(x + 30, y + 14, 0)
+  return (
+    <g className="memorial">
+      <Box x={x} y={y} w={36} d={10} h={7} m="wood" />
+      <Box x={x} y={y - 2} w={36} d={3} h={18} m="wood" />
+      <ellipse cx={hat[0]} cy={hat[1]} rx={6.5} ry={2.4} fill="#6e4429" />
+      <path d={`M ${hat[0] - 4} ${hat[1]} Q ${hat[0]} ${hat[1] - 7} ${hat[0] + 4} ${hat[1]} Z`} fill="#7c4e30" />
+      <rect x={candle[0] - 1.8} y={candle[1] - 7} width={3.6} height={7} fill="#f4efe2" stroke="#c9bfa8" strokeWidth={0.4} />
+      <ellipse className="flame" cx={candle[0]} cy={candle[1] - 9.5} rx={1.6} ry={2.8} fill="#f2b33a" />
+      {[[-6, 2, '#d46a6a'], [-3, 4, '#f0d36a'], [-8, 5, '#f4f1ea']].map(([dx, dy, f], i) => (
+        <circle key={i} cx={candle[0] + (dx as number)} cy={candle[1] + (dy as number)} r={1.8} fill={f as string} />
+      ))}
     </g>
   )
 }

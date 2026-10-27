@@ -40,15 +40,15 @@ const ALL_STATES: PlotState[] = [
 
 export const ACTIONS: Record<ActionId, ActionSpec> = {
   plant_garden: {
-    id: 'plant_garden', label: 'plant a garden', minYears: 4, maxYears: 8,
+    id: 'plant_garden', label: 'plant a garden', minYears: 6, maxYears: 10,
     targets: ['paved', 'parking', 'ruin', 'courtyard', 'play'], transforms: true,
   },
   establish_shared_courtyard: {
-    id: 'establish_shared_courtyard', label: 'establish a shared courtyard', minYears: 3, maxYears: 6,
+    id: 'establish_shared_courtyard', label: 'establish a shared courtyard', minYears: 5, maxYears: 8,
     targets: ['paved', 'parking', 'arcade', 'ruin', 'steps'], transforms: true,
   },
   add_play_space: {
-    id: 'add_play_space', label: 'add a play space', minYears: 2, maxYears: 4,
+    id: 'add_play_space', label: 'add a play space', minYears: 5, maxYears: 9,
     targets: ['paved', 'parking', 'garden', 'courtyard', 'fountain', 'ruin', 'steps'], transforms: true,
   },
   preserve_trace: {
