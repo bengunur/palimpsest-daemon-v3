@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CharacterBubble, CharacterDock, DecisionCard, FloatingBubble, ThoughtsDrawer, Tutorial, YearPill } from './components/Hud.tsx'
+import { music } from './audio/music.ts'
+import { CharacterBubble, CharacterDock, DecisionCard, FloatingBubble, SoundControl, ThoughtsDrawer, Tutorial, YearPill } from './components/Hud.tsx'
 import { SourceBadge } from './components/Ledger.tsx'
 import { Scene } from './components/Scene.tsx'
 import { decideLive, decideSimulated } from './sim/daemon.ts'
@@ -9,12 +10,29 @@ import { probeLive } from './sim/live.ts'
 import type { LiveStatus } from './sim/live.ts'
 import { buildSnapshot } from './sim/snapshot.ts'
 import type { CharacterId, City, DecisionRecord } from './sim/types.ts'
-import { END_YEAR } from './sim/world.ts'
+import { END_YEAR, isPresent } from './sim/world.ts'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const START_SEED = 7
 
 type Brain = 'live' | 'simulated'
+
+const SOUND_KEY = 'palimpsest.sound'
+interface Sound { volume: number; muted: boolean }
+
+function loadSound(): Sound {
+  try {
+    const s = JSON.parse(localStorage.getItem(SOUND_KEY) ?? 'null') as Partial<Sound> | null
+    if (s && typeof s.volume === 'number') return { volume: Math.max(0, Math.min(1, s.volume)), muted: !!s.muted }
+  } catch { /* private window or blocked storage: defaults */ }
+  return { volume: 0.3, muted: false }
+}
+
+/** What the music hears of the city: the clank of sites grows with every year of work; Frau Roth's voice. */
+function musicWorld(c: City) {
+  const years = buildingWorks(c).reduce((n, w) => n + Math.max(0, c.year - w.startYear), 0)
+  return { clank: Math.min(1, years * 0.12), rothAlive: isPresent(c.people.find((p) => p.id === 'roth')!, c.year) }
+}
 
 function lastDecision(c: City, after: number): DecisionRecord | null {
   for (let i = c.ledger.length - 1; i >= after; i--) {
@@ -42,6 +60,29 @@ export default function App() {
   const brainRef = useRef<Brain>('simulated')
   brainRef.current = brain
   const busy = useRef(false)
+  const [sound, setSound] = useState<Sound>(loadSound)
+
+  // music starts on the first touch of the page, as browsers require
+  useEffect(() => {
+    const start = () => music.unlock()
+    window.addEventListener('pointerdown', start, { once: true })
+    window.addEventListener('keydown', start, { once: true })
+    return () => { window.removeEventListener('pointerdown', start); window.removeEventListener('keydown', start) }
+  }, [])
+
+  useEffect(() => {
+    music.setVolume(sound.volume)
+    music.setMuted(sound.muted)
+    try { localStorage.setItem(SOUND_KEY, JSON.stringify(sound)) } catch { /* not remembered, still works */ }
+  }, [sound])
+
+  // the music follows the city year by year; a work finished this year brings it home once
+  const cadenceYear = useRef(0)
+  useEffect(() => {
+    music.setWorld(musicWorld(city))
+    const finished = city.ledger.some((e) => e.type === 'completion' && e.year === city.year)
+    if (finished && cadenceYear.current !== city.year) { cadenceYear.current = city.year; music.cadence() }
+  }, [city])
 
   useEffect(() => {
     probeLive().then((s) => { setLive(s); if (s.available) setBrain('live') })
@@ -135,7 +176,7 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setSelected(null); setDrawer(false) }
       const tag = (e.target as HTMLElement).tagName
-      if (e.key === ' ' && tag !== 'BUTTON' && !playing && !thinking) { e.preventDefault(); step() }
+      if (e.key === ' ' && tag !== 'BUTTON' && tag !== 'INPUT' && !playing && !thinking) { e.preventDefault(); step() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -164,6 +205,9 @@ export default function App() {
           {live.available && brain === 'live' ? <SourceBadge source="live" model={live.model} /> : <SourceBadge source="simulated" />}
           <span>{live.available && brain === 'live' ? 'Claude decides' : 'simulated daemon'}</span>
         </div>
+        <SoundControl volume={sound.volume} muted={sound.muted}
+          onVolume={(volume) => { music.unlock(); setSound({ volume, muted: volume === 0 }) }}
+          onMute={() => { music.unlock(); setSound((s) => ({ volume: s.muted && s.volume === 0 ? 0.3 : s.volume, muted: !s.muted })) }} />
         <button className="thoughts-btn" onClick={() => setDrawer((d) => !d)}>☰ The daemon’s thoughts</button>
       </header>
 

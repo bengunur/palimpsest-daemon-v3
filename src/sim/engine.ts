@@ -1,5 +1,6 @@
 import { ACTIONS, CAPACITY, PLOT_IDS, PLOT_NAMES, resultState } from '../../shared/actions.ts'
 import type { ActionId, PlotId, ValidDecision, ValidationContext } from '../../shared/actions.ts'
+import { recordFeelings } from './feelings.ts'
 import { pick, rand, randInt, uid } from './rng.ts'
 import type { CharacterId, City, Mood, Person, Plot, Source, Want, Whisper, Work } from './types.ts'
 import { END_YEAR, START_YEAR, ageOf, cast, initialPlots, isPresent, mortality, stageOf } from './world.ts'
@@ -91,7 +92,7 @@ export function createCity(seed: number): City {
     plots: initialPlots(), people: cast(), whispers: [], works: [], ledger: [], reactions: [], milestones: [],
     weights: { memory: 0.4, use: 0.25, play: 0.2, stillness: 0.15 },
     needsThought: false, thoughtReasons: [], lastThoughtYear: START_YEAR - 1, toldYear: {},
-    stormYear: 0,
+    stormYear: 0, tells: [], moods: [],
   }
   c.stormYear = randInt(c, 2048, 2056)
   c.ledger.push({
@@ -99,6 +100,7 @@ export function createCity(seed: number): City {
     text: 'The daemon of Kleiner Ilmplatz has been listening since 1871. It has never once been in a hurry.',
   })
   gatherWhispers(c)
+  recordFeelings(c)
   return c
 }
 
@@ -301,6 +303,9 @@ export function advanceYear(prev: City): City {
   const unanswered = openWhispers(c).some((w) => !inProgress.has(w.id))
   const worth = reasons.filter((r) => (r !== 'the waiting is over' && r !== 'four quiet years') || unanswered)
   if (worth.length) requestThought(c, worth)
+
+  // 5. how the year felt, to each of them — read off the city, changes nothing in it
+  recordFeelings(c)
   return c
 }
 
@@ -348,6 +353,7 @@ export function tellDaemon(prev: City, id: CharacterId): { city: City; outcome: 
   w.told = true
   w.heardCount++
   c.toldYear[id] = c.year
+  c.tells.push({ year: c.year, personId: id })
   c.ledger.push({ id: uid(c, 'e'), year: c.year, type: 'event', text: `You told the daemon ${personName(c, id)}’s wish: “${w.text}”` })
   // a told wish interrupts the daemon's listening (a wait already at least a year old)
   const wait = activeWait(c)

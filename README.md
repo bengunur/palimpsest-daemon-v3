@@ -6,7 +6,9 @@ One small public square, **Kleiner Ilmplatz** (a fictional, Weimar-inspired squa
 
 An invisible urban daemon, **Der Langsame** ("the Slow One"), listens to the square, remembers it, and decides on its own how to change it. **Nothing it does takes under a year.** By the time a decision becomes stone and soil, the person who asked for it has often graduated, moved away or died. Over time the square becomes a palimpsest of delayed answers to past realities.
 
-**Public demo:** https://bengunur.github.io/palimpsest-daemon/ (simulated daemon; see [Live daemon](#live-daemon-local-only))
+**Public demo:** https://bengunur.github.io/palimpsest-daemon-v3/ (simulated daemon; see [Live daemon](#live-daemon-local-only))
+
+*Version 3 of [palimpsest-daemon](https://github.com/bengunur/palimpsest-daemon): the same city and daemon, now with feelings, faces, a focus camera and music (see [Three people, one square, slow feelings](#three-people-one-square-slow-feelings)).*
 
 ---
 
@@ -26,6 +28,19 @@ An invisible urban daemon, **Der Langsame** ("the Slow One"), listens to the squ
 Frau Roth's life ends through an aging system (a seeded mortality chance from age 80), never because a project finished. She fades gently under the linden, and her empty bench, hat and a candle remain. Her garden wish stays in the daemon's memory.
 
 **◐** lifts every historical layer of the square like tracing paper. **☰ The daemon's thoughts** opens the full decision history.
+
+## Three people, one square, slow feelings
+
+Clicking someone moves the camera in (1.6×) and opens their bubble. It's a **speech bubble** when they have something to say, and a dashed **thought cloud** when they're only thinking about the square. Each bubble names their current feeling, says it in their own voice, and ends with a **mood strip**: one small face for each of the last eight years.
+
+- **Emotions**: *calm, happy, surprised, confused, frustrated, tired, bored*. Each has its own face (eyes, brows, mouth), body language (a bounce, a stamp, a sag, a sway, a tilt, a jump) and a small floating symbol. Everyone blinks, out of step with each other. All of this switches off with the system's *reduce motion* setting.
+- **One project, three realities.** [`src/sim/feelings.ts`](src/sim/feelings.ts) reads each work through each life: the person's age and stage, their *taste*, and their current wish. A playground under construction makes child Mio hopeful, student Lena frustrated by the noise, and leaves Frau Roth unmoved. As teenagers, the same Mio would roll their eyes at it.
+- **Slow, like the daemon.** A decision is invisible in the year it's made, and telling a wish changes what someone *says*, never yet how they *feel*. From the next year, feelings drift with each year of building: hope → impatience → giving up, at each person's own patience. Children have none; Frau Roth has had practice. A finished work is a surprise or a disappointment, then turns into habit over the next years (*"I sit in the garden on Tuesdays now"*, *"I walk the long way round"*).
+- Feelings are **derived from the city and never feed back into it**. They use no randomness, so seeds, the daemon's decisions and the one-year rule are unchanged. All dialogue is scripted. No feeling ever calls an AI.
+
+### Music
+
+A slightly drunk music box over a breathing accordion, in 7/8. It's generated live with Web Audio, so there are no files and no network requests. It starts at the first click on the page (browsers require this), at 30% volume, and the **♪** button and slider in the top bar control it (remembered per browser). The music follows the city slowly. Building sites add a clank that grows with every year of work. A finished work resolves the tune once to its home chord. When Frau Roth dies, the low voice that walked beneath the tune stops for good.
 
 ## The daemon
 
@@ -115,16 +130,18 @@ For the AI in Design recording, run the same loop locally with `npm run daemon`.
 ```
 shared/actions.ts        the daemon's vocabulary, JSON schema, validateDecision() — used by browser AND server
 src/sim/                 engine (years, works, whispers, life events, reactions), world (plots, the three characters),
+                         feelings (emotions, perspective lines, mood history),
                          policy (simulated daemon), visions, snapshot (for Claude), daemon (live/sim), tests
 src/components/          Scene (isometric SVG), Character (age-driven SVG people), Art, Hud (bubble, decision card,
                          year pill, drawer), Ledger, render smoke test
+src/audio/music.ts       the generated soundtrack (Web Audio)
 server/daemon.ts         local-only Claude bridge;  server/daemon-prompt.md  the daemon's system prompt
 ```
 
 React 19 + Vite + TypeScript, with hand-drawn SVG and CSS. There are no other runtime dependencies.
 
 ```bash
-npm test          # one-year rule, validator, aging, delayed completion, evolving wishes, agency, render
+npm test          # one-year rule, validator, aging, delayed completion, evolving wishes, agency, feelings, render
 npm run build     # production build (GITHUB_PAGES=1 for the Pages base path)
 ```
 

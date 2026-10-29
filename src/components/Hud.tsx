@@ -3,17 +3,21 @@ import type { ReactNode } from 'react'
 import { ACTIONS } from '../../shared/actions.ts'
 import { currentWhisper, plotName, workFor } from '../sim/engine.ts'
 import type { TellOutcome } from '../sim/engine.ts'
+import { EMOTION_GLYPH, EMOTION_LABEL, feelingOf, moodHistory } from '../sim/feelings.ts'
 import type { LiveStatus } from '../sim/live.ts'
 import { lastWish, latestReaction, statusOf } from '../sim/status.ts'
 import type { CharacterId, City, DecisionRecord } from '../sim/types.ts'
-import { END_YEAR, stageOf } from '../sim/world.ts'
-import { ACCENT, Figure } from './Character.tsx'
+import { END_YEAR, START_YEAR } from '../sim/world.ts'
+import { ACCENT, Face, Figure } from './Character.tsx'
 import { Ledger, SourceBadge } from './Ledger.tsx'
 import { moodIcon } from './Scene.tsx'
 
 const ORDER: CharacterId[] = ['mio', 'lena', 'roth']
 
-/** The speech bubble: who they are now, what they want now, and the one thing the player can do. */
+/**
+ * The bubble: who they are now, how the square feels to them this year, what they want now, and the one
+ * thing the player can do. A speech bubble when they have something to say; a thought cloud otherwise.
+ */
 export function CharacterBubble({ city, id, outcome, thinking, onTell, onClose }: {
   city: City; id: CharacterId; outcome: TellOutcome | null; thinking: boolean; onTell: () => void; onClose: () => void
 }) {
@@ -36,6 +40,9 @@ export function CharacterBubble({ city, id, outcome, thinking, onTell, onClose }
   const w = currentWhisper(city, id)
   const work = workFor(city, w)
   const toldNow = city.toldYear[id] === city.year
+  const feeling = feelingOf(city, id)
+  const thought = feeling?.kind === 'thought' && !w && !reaction
+  const saysAgain = feeling && reaction && feeling.line === reaction.line
   let status: string | null = null
   if (toldNow && !work) {
     status = thinking ? 'The daemon is listening…'
@@ -44,13 +51,17 @@ export function CharacterBubble({ city, id, outcome, thinking, onTell, onClose }
       : 'The daemon heard — and chose something else.'
   }
   return (
-    <div className="bubble" style={{ ['--accent' as string]: ACCENT[id] }}>
+    <div className={`bubble ${thought ? 'is-thought' : ''}`} style={{ ['--accent' as string]: ACCENT[id] }}>
       <header>
         <b>{p.name}</b><span>{st.age} · {st.label.toLowerCase()}</span>
         <button className="x" onClick={onClose} aria-label="Close">×</button>
       </header>
+      {feeling && <span className={`emo-chip emo-${feeling.emotion}`}>{`${EMOTION_GLYPH[feeling.emotion] || '·'} feels ${EMOTION_LABEL[feeling.emotion]}`}</span>}
       {reaction && <p className={`reaction mood-${reaction.mood}`}><i>{moodIcon(reaction.mood)}</i> “{reaction.line}”</p>}
-      {w ? <q className="wish">{w.text}</q> : !reaction && <q className="idle">{stageOf(p, city.year).idle}</q>}
+      {feeling && !saysAgain && (feeling.kind === 'speech' || thought
+        ? <q className={thought ? 'idle thinks' : 'says'}>{feeling.line}</q>
+        : <p className="aside"><i>thinks</i> {feeling.line}</p>)}
+      {w && <q className="wish">{w.text}</q>}
       {work && (
         <div className="building">
           <span>The daemon is building it</span>
@@ -60,6 +71,29 @@ export function CharacterBubble({ city, id, outcome, thinking, onTell, onClose }
       )}
       {w && !work && !toldNow && <button className="tell" onClick={onTell} disabled={thinking}>Tell the daemon</button>}
       {status && <p className="status">{status}</p>}
+      <MoodStrip city={city} id={id} />
+    </div>
+  )
+}
+
+/** The last eight years, one small face each: the daemon's slowness, read in a person. */
+export function MoodStrip({ city, id }: { city: City; id: CharacterId }) {
+  const years = moodHistory(city, id, 8)
+  return (
+    <div className="mood-strip" aria-label={`How the last ${years.length} years felt`}>
+      <span className="ms-from">{years[0].year}</span>
+      {years.map(({ year, emotion }) => (
+        <span key={year} className={`ms ${emotion ? '' : 'empty'} ${year === city.year ? 'now' : ''}`}
+          title={emotion ? `${year}: ${EMOTION_LABEL[emotion]}` : year < START_YEAR ? `${year}: before the story` : `${year}: not on the square`}>
+          {emotion && (
+            <svg viewBox="-9 -9 18 18" aria-hidden="true">
+              <circle r={8.2} className="ms-head" />
+              <g transform="translate(-4.4,0)"><Face r={8} emotion={emotion} /></g>
+            </svg>
+          )}
+        </span>
+      ))}
+      <span className="ms-to">{city.year}</span>
     </div>
   )
 }
@@ -119,13 +153,14 @@ export function CharacterDock({ city, selected, onPick }: { city: City; selected
         const st = statusOf(city, id)
         const year = st.memorial ? p.diedYear! - 1 : city.year
         const wish = !st.memorial && currentWhisper(city, id) && !workFor(city, currentWhisper(city, id))
+        const emotion = feelingOf(city, id)?.emotion
         return (
           <button key={id} className={`portrait ${selected === id ? 'on' : ''} ${st.memorial ? 'memorial' : ''} ${selected && selected !== id ? 'dim' : ''}`}
             style={{ ['--accent' as string]: ACCENT[id] }} onClick={() => onPick(id)} aria-pressed={selected === id}
             title={st.memorial ? `${p.name}, ${st.years} — revisit her last wish` : `See the square as ${p.name} does`}>
             <svg viewBox="-20 -62 40 66" className="face" aria-hidden="true">
               <circle cx={0} cy={-26} r={30} className="face-bg" />
-              <g transform="translate(0,-2) scale(0.95)"><Figure person={p} year={year} /></g>
+              <g transform="translate(0,-2) scale(0.95)"><Figure person={p} year={year} emotion={emotion} /></g>
             </svg>
             <span className="who"><b>{p.name}</b><span>{st.memorial ? `🕯 ${st.years}` : `${st.age} · ${st.label}`}</span></span>
             {wish && <i className="dot" title="Has a wish" />}
@@ -196,7 +231,7 @@ export function ThoughtsDrawer({ city, live, brain, setBrain, thinking, onClose,
           ? brain === 'live'
             ? <>Decisions come from <b>Claude</b> via a local <code>claude -p</code> bridge. <button className="link" onClick={() => setBrain('simulated')}>use simulated</button></>
             : <>Simulated daemon (live Claude available). <button className="link" onClick={() => setBrain('live')}>use live Claude</button></>
-          : <>A <b>simulated</b> daemon: a deterministic policy, not AI. Real Claude thinking runs only on a local machine — <a href="https://github.com/bengunur/palimpsest-daemon#live-daemon-local-only" target="_blank" rel="noreferrer">README</a>.</>}
+          : <>A <b>simulated</b> daemon: a deterministic policy, not AI. Real Claude thinking runs only on a local machine — <a href="https://github.com/bengunur/palimpsest-daemon-v3#live-daemon-local-only" target="_blank" rel="noreferrer">README</a>.</>}
       </p>
       <div className="drawer-actions">
         <button onClick={onRestart}>Restart</button>
@@ -205,5 +240,18 @@ export function ThoughtsDrawer({ city, live, brain, setBrain, thinking, onClose,
       </div>
       <Ledger city={city} thinking={thinking} />
     </aside>
+  )
+}
+
+/** Music: on/off and a volume slider. The music itself only starts after the first click anywhere. */
+export function SoundControl({ volume, muted, onVolume, onMute }: {
+  volume: number; muted: boolean; onVolume: (v: number) => void; onMute: () => void
+}) {
+  return (
+    <div className={`sound ${muted ? 'off' : ''}`}>
+      <button onClick={onMute} aria-pressed={!muted} aria-label={muted ? 'Unmute music' : 'Mute music'} title={muted ? 'Music off' : 'Music on'}>♪</button>
+      <input type="range" min={0} max={100} step={1} value={Math.round(volume * 100)} aria-label="Music volume"
+        onChange={(e) => onVolume(Number(e.target.value) / 100)} />
+    </div>
   )
 }

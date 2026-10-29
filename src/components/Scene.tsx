@@ -1,6 +1,7 @@
 import { PLOT_IDS, resultState } from '../../shared/actions.ts'
 import type { PlotId } from '../../shared/actions.ts'
 import { buildingWorks, currentWhisper, workFor } from '../sim/engine.ts'
+import { feelingOf } from '../sim/feelings.ts'
 import { GROUND_LABEL } from '../sim/interpret.ts'
 import type { CharacterId, City } from '../sim/types.ts'
 import { visionFor } from '../sim/visions.ts'
@@ -21,6 +22,30 @@ interface Props {
 }
 
 const ORDER = [...PLOT_IDS].sort((a, b) => depth(RECTS[a]) - depth(RECTS[b]))
+
+/** The camera: how far it leans in when someone is chosen, and where in the frame their feet land. */
+export const FOCUS_ZOOM = 1.6
+const FRAME_CENTER: [number, number] = [85, 155]
+// feet sit below the middle so the head, and the bubble above it, stay in view
+const FEET_DROP = 130
+
+/** Where the camera looks for a person: where they stand, or — after Frau Roth — her bench. */
+export function focusPoint(city: City, id: CharacterId): [number, number] {
+  const p = city.people.find((x) => x.id === id)!
+  if (!isPresent(p, city.year) && p.diedYear !== city.year) {
+    const r = RECTS.linden
+    return P(r.x + r.w - 16, r.y + 84, 0)
+  }
+  return screenSpot(id)
+}
+
+export function cameraTransform(city: City, selected: CharacterId | null): string {
+  if (!selected) return 'translate(0px, 0px) scale(1)'
+  const [fx, fy] = focusPoint(city, selected)
+  const tx = FRAME_CENTER[0] - FOCUS_ZOOM * fx
+  const ty = FRAME_CENTER[1] + FEET_DROP - FOCUS_ZOOM * fy
+  return `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${FOCUS_ZOOM})`
+}
 const TRANSFORMING = new Set(['plant_garden', 'establish_shared_courtyard', 'add_play_space'])
 
 export function Scene({ city, layers, selected, hover, tutorial, onPick, onHover, onBackground }: Props) {
@@ -39,48 +64,51 @@ export function Scene({ city, layers, selected, hover, tutorial, onPick, onHover
         </pattern>
       </defs>
 
-      <g className="ground-layer">
-        <polygon className="flat f-street" points={rectPts({ x: SQUARE.x - 14, y: SQUARE.y - 14, w: SQUARE.w + 28, d: SQUARE.d + 28 })} />
-        <Backdrop />
-        {ORDER.map((id) => {
-          const p = city.plots[id]
-          const r = RECTS[id]
-          const work = works.find((w) => w.plot === id)
-          const transforming = work && TRANSFORMING.has(work.action)
-          const progress = work ? (city.year - work.startYear) / (work.completionYear - work.startYear) : 0
+      <g className="camera" style={{ transform: cameraTransform(city, selected) }}>
+        <g className="ground-layer">
+          <polygon className="flat f-street" points={rectPts({ x: SQUARE.x - 14, y: SQUARE.y - 14, w: SQUARE.w + 28, d: SQUARE.d + 28 })} />
+          <Backdrop />
+          {ORDER.map((id) => {
+            const p = city.plots[id]
+            const r = RECTS[id]
+            const work = works.find((w) => w.plot === id)
+            const transforming = work && TRANSFORMING.has(work.action)
+            const progress = work ? (city.year - work.startYear) / (work.completionYear - work.startYear) : 0
+            return (
+              <g key={id} className="plot">
+                {transforming
+                  ? <ConstructionArt r={r} id={id} from={p.state} target={resultState(work.action, p.state)} progress={progress} />
+                  : <PlotArt state={p.state} r={r} id={id} />}
+                <MarksArt marks={p.marks} r={r} year={city.year} />
+              </g>
+            )
+          })}
+        </g>
+
+        {layers && <Palimpsest city={city} />}
+
+        {vision && <VisionLayer city={city} vision={vision} />}
+
+        {works.map((w) => <WorkSign key={w.id} city={city} plot={w.plot as PlotId} start={w.startYear} end={w.completionYear}
+          label={w.action === 'plant_tree' ? 'a tree' : w.action === 'preserve_trace' ? 'a bronze trace' : GROUND_LABEL[resultState(w.action, city.plots[w.plot as PlotId].state)]} />)}
+
+        {people.map((p) => {
+          const w = currentWhisper(city, p.id)
+          const indicator = !w ? null : workFor(city, w) ? '…' : '!'
           return (
-            <g key={id} className="plot">
-              {transforming
-                ? <ConstructionArt r={r} id={id} from={p.state} target={resultState(work.action, p.state)} progress={progress} />
-                : <PlotArt state={p.state} r={r} id={id} />}
-              <MarksArt marks={p.marks} r={r} year={city.year} />
-            </g>
+            <Character key={p.id} person={p} year={city.year}
+              selected={selected === p.id} hovered={hover === p.id} dim={!!selected && selected !== p.id}
+              indicator={indicator} ring={tutorial && p.id === 'mio'} passing={p.diedYear === city.year}
+              graduating={city.milestones.some((m) => m.personId === p.id && m.year === city.year && m.icon === '🎓')}
+              emotion={feelingOf(city, p.id)?.emotion ?? 'calm'}
+              onPick={() => onPick(p.id)} onHover={(on) => onHover(on ? p.id : null)} />
           )
         })}
+
+        <MemorialAnchor city={city} selected={selected === "roth"} dim={!!selected && selected !== "roth"} onPick={() => onPick("roth")} />
+
+        <Popups city={city} />
       </g>
-
-      {layers && <Palimpsest city={city} />}
-
-      {vision && <VisionLayer city={city} vision={vision} />}
-
-      {works.map((w) => <WorkSign key={w.id} city={city} plot={w.plot as PlotId} start={w.startYear} end={w.completionYear}
-        label={w.action === 'plant_tree' ? 'a tree' : w.action === 'preserve_trace' ? 'a bronze trace' : GROUND_LABEL[resultState(w.action, city.plots[w.plot as PlotId].state)]} />)}
-
-      {people.map((p) => {
-        const w = currentWhisper(city, p.id)
-        const indicator = !w ? null : workFor(city, w) ? '…' : '!'
-        return (
-          <Character key={p.id} person={p} year={city.year}
-            selected={selected === p.id} hovered={hover === p.id} dim={!!selected && selected !== p.id}
-            indicator={indicator} ring={tutorial && p.id === 'mio'} passing={p.diedYear === city.year}
-            graduating={city.milestones.some((m) => m.personId === p.id && m.year === city.year && m.icon === '🎓')}
-            onPick={() => onPick(p.id)} onHover={(on) => onHover(on ? p.id : null)} />
-        )
-      })}
-
-      <MemorialAnchor city={city} selected={selected === "roth"} dim={!!selected && selected !== "roth"} onPick={() => onPick("roth")} />
-
-      <Popups city={city} />
     </svg>
   )
 }

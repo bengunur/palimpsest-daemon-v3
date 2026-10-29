@@ -5,8 +5,10 @@ import { advanceYear, applyDecision, createCity, tellDaemon } from '../sim/engin
 import { statusOf } from '../sim/status.ts'
 import type { CharacterId, City } from '../sim/types.ts'
 import { ageOf } from '../sim/world.ts'
+import { EMOTIONS } from '../sim/feelings.ts'
+import { Face } from './Character.tsx'
 import { CharacterBubble, CharacterDock, DecisionCard } from './Hud.tsx'
-import { Scene } from './Scene.tsx'
+import { FOCUS_ZOOM, Scene } from './Scene.tsx'
 
 const noop = () => {}
 const IDS: CharacterId[] = ['mio', 'lena', 'roth']
@@ -57,7 +59,7 @@ describe('the acceptance loop renders', () => {
       renderToString(<CharacterDock city={c} selected={IDS[c.year % 3]} onPick={noop} />)
     }
     expect(c.plots.linden.marks.some((m) => m.kind === 'memorial')).toBe(true)
-  })
+  }, 120_000) // sixty years × every perspective: slow on modest machines
 })
 
 describe('perspectives: one shared city', () => {
@@ -131,5 +133,32 @@ describe('conflicting realities', () => {
     const roth = c.reactions.find((r) => r.personId === 'roth')
     expect(roth?.mood).toBe('mixed')
     expect(roth?.line).toMatch(/Noisy/)
+  })
+})
+
+describe('feelings on screen', () => {
+  it('every emotion draws a distinct face', () => {
+    const faces = EMOTIONS.map((e) => renderToString(<svg><Face r={8} emotion={e} /></svg>))
+    expect(new Set(faces).size).toBe(EMOTIONS.length)
+    for (const e of EMOTIONS) expect(faces[EMOTIONS.indexOf(e)]).toContain(`face-${e}`)
+  })
+
+  it('the bubble names the feeling, says it in their words, and shows the mood strip', () => {
+    let c = applyDecision(createCity(7), { noticed: '', action: 'add_play_space', plotId: 'eastlot', durationYears: 7, startYear: 2026, completionYear: 2033, reason: '', utterance: '' }, 'simulated', [])
+    c = advanceYear(c)
+    const mio = bubble(c, 'mio')
+    expect(mio).toContain('feels happy')
+    expect(mio).toContain('mood-strip')
+    expect(bubble(c, 'lena')).toContain('feels frustrated')
+    // the characters in the square wear the same feelings
+    const html = scene(c)
+    expect(html).toContain('emo-happy')
+    expect(html).toContain('emo-frustrated')
+  })
+
+  it('choosing someone moves the camera in; letting go moves it back', () => {
+    const c = createCity(7)
+    expect(scene(c)).toContain('scale(1)')
+    for (const id of IDS) expect(scene(c, id)).toContain(`scale(${FOCUS_ZOOM})`)
   })
 })

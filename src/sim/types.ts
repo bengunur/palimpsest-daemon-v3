@@ -1,4 +1,5 @@
 import type { ActionId, PlotId, PlotState } from '../../shared/actions.ts'
+import type { Emotion } from './feelings.ts'
 
 export type PersonaLens = 'memory' | 'present' | 'possibility'
 
@@ -129,4 +130,8 @@ export interface City {
   toldYear: Partial<Record<CharacterId, number>>
   /** the year a storm will fell the old linden (not the daemon's doing) */
   stormYear: number
+  /** every wish the player carried to the daemon, by year */
+  tells: { year: number; personId: CharacterId }[]
+  /** how each person felt, recorded once a year; derived from the city, never a cause of anything */
+  moods: { year: number; personId: CharacterId; emotion: Emotion }[]
 }

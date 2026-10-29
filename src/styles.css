@@ -35,7 +35,7 @@ code { font: 0.9em var(--mono); background: #efe6d3; padding: 0 4px; border-radi
 .brand h1 { margin: 0; font-weight: 500; font-size: 19px; letter-spacing: .24em; text-transform: uppercase; }
 .brand span { font-style: italic; color: var(--ink-2); font-size: 14px; }
 .mode-chip { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2); background: rgba(255, 250, 240, .7); padding: 4px 10px 4px 5px; border-radius: 20px; border: 1px solid var(--rule); }
-.thoughts-btn { margin-left: auto; background: var(--card); border: 1px solid var(--rule); border-radius: 20px; padding: 7px 14px; font-size: 14px; box-shadow: 0 1px 0 rgba(0,0,0,.04); }
+.thoughts-btn { background: var(--card); border: 1px solid var(--rule); border-radius: 20px; padding: 7px 14px; font-size: 14px; box-shadow: 0 1px 0 rgba(0,0,0,.04); }
 .thoughts-btn:hover { border-color: var(--ink-3); }
 
 .badge { font: 500 10px/1 var(--mono); letter-spacing: .08em; padding: 4px 7px 3px; border-radius: 10px; white-space: nowrap; text-transform: uppercase; }
@@ -310,7 +310,83 @@ code { font: 0.9em var(--mono); background: #efe6d3; padding: 0 4px; border-radi
 @keyframes popfloat { 0% { opacity: 0; } 10% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes popstay { 0% { opacity: 0; } 8% { opacity: 1; } 88% { opacity: 1; } 100% { opacity: 0; } }
 
+/* ── music ────────────────────────────────────── */
+.sound { margin-left: auto; display: flex; align-items: center; gap: 6px; background: rgba(255, 250, 240, .7); border: 1px solid var(--rule); border-radius: 20px; padding: 3px 10px 3px 3px; }
+.sound button { width: 28px; height: 28px; border: 0; border-radius: 50%; background: #f1e8d6; font: 600 15px/1 var(--serif); color: var(--ochre-d); position: relative; }
+.sound button:hover { background: #ecd6a6; }
+.sound.off button { color: var(--ink-3); }
+.sound.off button::after { content: ''; position: absolute; left: 6px; right: 6px; top: 50%; height: 1.5px; background: var(--warn); transform: rotate(-40deg); }
+.sound input[type=range] { width: 76px; accent-color: var(--ochre); }
+.sound.off input[type=range] { opacity: .45; }
+
+/* ── camera: leans in on whoever is chosen ─────── */
+.camera { transform-origin: 0 0; transition: transform .75s cubic-bezier(.45,.05,.2,1); }
+
+/* ── faces and feelings ────────────────────────── */
+.face .eyes { transform-box: fill-box; transform-origin: 50% 50%; animation: blink 5.2s infinite; animation-delay: var(--blink-delay, 0s); }
+.face-tired .eyes { animation-duration: 3.4s; }
+.face-surprised .eyes { animation-duration: 7s; }
+@keyframes blink { 0%, 94%, 100% { transform: none; } 96.5% { transform: scaleY(.12); } }
+.ch-idle { transform-box: fill-box; transform-origin: 50% 100%; }
+.ch-idle.emo-happy { animation-name: e-happy; animation-timing-function: cubic-bezier(.3,0,.5,1); }
+.ch-idle.emo-frustrated { animation-name: e-stamp; animation-timing-function: steps(2, jump-none); }
+.ch-idle.emo-tired { animation-name: e-sag; }
+.ch-idle.emo-bored { animation-name: e-sway; }
+.ch-idle.emo-confused { animation-name: e-tilt; }
+.ch-idle.emo-surprised { animation-name: e-jump; animation-iteration-count: 1; animation-fill-mode: both; }
+@keyframes e-happy { 0%, 100% { transform: none; } 45% { transform: translateY(-3px) scaleY(1.02); } }
+@keyframes e-stamp { 0%, 100% { transform: rotate(-1.4deg); } 50% { transform: rotate(1.4deg) translateY(-.6px); } }
+@keyframes e-sag { 0%, 100% { transform: none; } 55% { transform: translateY(1.2px) scaleY(.985); } }
+@keyframes e-sway { 0%, 100% { transform: rotate(-1.8deg); } 50% { transform: rotate(1.8deg); } }
+@keyframes e-tilt { 0%, 30%, 100% { transform: none; } 45%, 80% { transform: rotate(-3deg); } }
+@keyframes e-jump { 0% { transform: none; } 18% { transform: translateY(-7px) scaleY(1.05); } 34% { transform: translateY(0) scaleY(.96); } 46%, 100% { transform: none; } }
+.emote { font: 700 17px var(--hand); fill: var(--ink-2); paint-order: stroke; stroke: #fffaf0; stroke-width: 3px; pointer-events: none; animation: emote 3.2s ease-in-out infinite, fade .6s both; }
+.emote-happy { fill: #c98a12; }
+.emote-frustrated { fill: var(--warn); animation-duration: .9s, .6s; }
+.emote-surprised { fill: var(--ochre-d); font-size: 20px; }
+.emote-tired { fill: #7d7790; }
+.emote-confused { fill: #5a7aa3; }
+@keyframes emote { 0%, 100% { transform: translateY(0); opacity: .9; } 50% { transform: translateY(-4px); opacity: .6; } }
+
+/* bubble: feeling, thought cloud, mood strip */
+.bubble .emo-chip { display: inline-block; margin: 0 0 6px; font: 500 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2);
+  background: #f3ead8; border-radius: 10px; padding: 2px 8px 1px; }
+.emo-chip.emo-happy { background: #fbecc6; color: #8f6418; }
+.emo-chip.emo-surprised { background: #eef6e4; color: #557a2e; }
+.emo-chip.emo-confused { background: #e7eef6; color: #3f5f88; }
+.emo-chip.emo-frustrated { background: #f8e2db; color: var(--warn); }
+.emo-chip.emo-tired { background: #ece9f1; color: #615b78; }
+.emo-chip.emo-bored { background: #efece6; color: var(--ink-3); }
+.bubble q.says { font-size: 15.5px; }
+.bubble .aside { margin: 0 0 6px; font-size: 13.5px; font-style: italic; color: var(--ink-2); }
+.bubble .aside i { font: normal 500 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-right: 3px; }
+.bubble.is-thought { border-style: dashed; border-radius: 26px; background: #fffdf7; }
+.bubble.is-thought q.thinks { color: var(--ink); font-family: var(--serif); }
+.above .bubble.is-thought::after, .below .bubble.is-thought::after { width: 12px; height: 12px; border: 2px dashed var(--accent); border-radius: 50%; background: #fffdf7; margin-left: -6px; }
+.above .bubble.is-thought::after { bottom: -18px; }
+.below .bubble.is-thought::after { top: -18px; }
+.above .bubble.is-thought::before, .below .bubble.is-thought::before { content: ''; position: absolute; left: var(--tail, 50%); width: 7px; height: 7px; margin-left: -1px; border: 1.5px solid var(--accent); border-radius: 50%; background: #fffdf7; }
+.above .bubble.is-thought::before { bottom: -29px; }
+.below .bubble.is-thought::before { top: -29px; }
+.mood-strip { display: flex; align-items: center; gap: 2px; margin-top: 8px; padding-top: 7px; border-top: 1px dotted var(--rule); }
+.mood-strip .ms { width: 20px; height: 20px; border-radius: 50%; flex: none; }
+.mood-strip .ms svg { width: 20px; height: 20px; display: block; }
+.mood-strip .ms-head { fill: #f0c9a4; stroke: rgba(80,60,40,.25); stroke-width: .6; }
+.mood-strip .ms.empty { background: transparent; border: 1px dashed var(--rule); transform: scale(.55); }
+.mood-strip .ms.now { box-shadow: 0 0 0 2px var(--accent); }
+.mood-strip .ms .eyes { animation: none; }
+.mood-strip .ms-from, .mood-strip .ms-to { font: 10px var(--mono); color: var(--ink-3); }
+.mood-strip .ms-from { margin-right: 3px; }
+.mood-strip .ms-to { margin-left: 3px; }
+.floating-bubble, .bubble { width: 272px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .camera { transition: none; }
+  .ch-idle, .face .eyes, .emote { animation: none !important; }
+}
+
 @media (max-width: 720px) {
+  .sound input[type=range] { width: 52px; }
   .brand span, .mode-chip span { display: none; }
   .year-pill { gap: 6px; padding: 5px; }
   .year-pill .yr { font-size: 26px; min-width: 70px; height: 30px; }

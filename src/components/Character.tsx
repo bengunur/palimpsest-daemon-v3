@@ -1,8 +1,13 @@
 // The three people of the square, drawn from simple shapes. Everything about how they look
 // is derived from their age: height, proportions, clothes, posture, idle rhythm.
+import { EMOTION_GLYPH } from '../sim/feelings.ts'
+import type { Emotion } from '../sim/feelings.ts'
 import type { CharacterId, Person } from '../sim/types.ts'
 import { ageOf, figureScale, stageOf } from '../sim/world.ts'
 import { P } from './geo.ts'
+
+/** Seconds per cycle of each emotion's body language. */
+const EMOTION_PACE: Partial<Record<Emotion, number>> = { happy: 0.75, frustrated: 0.5, tired: 3.6, bored: 4.2, confused: 2.6, surprised: 2.4 }
 
 /** Where each person stands, in plan units. */
 export const SPOTS: Record<CharacterId, [number, number]> = {
@@ -63,22 +68,86 @@ function Coat({ b, color, long = 0, shade }: { b: Body; color: string; long?: nu
   )
 }
 
-function Head({ b, hair, children }: { b: Body; hair: React.ReactNode; children?: React.ReactNode }) {
+function Head({ b, hair, emotion = 'calm', children }: { b: Body; hair: React.ReactNode; emotion?: Emotion; children?: React.ReactNode }) {
   const cy = -b.legH - b.bodyH - b.headR + 1.5
   return (
     <g transform={`translate(0,${cy})`}>
       {hair}
       <circle r={b.headR} fill={SKIN} />
-      <circle cx={b.headR * 0.32} cy={-b.headR * 0.05} r={0.95} fill="#3a2e26" />
-      <circle cx={b.headR * 0.72} cy={-b.headR * 0.05} r={0.95} fill="#3a2e26" />
-      <path d={`M ${b.headR * 0.35} ${b.headR * 0.38} Q ${b.headR * 0.55} ${b.headR * 0.5} ${b.headR * 0.75} ${b.headR * 0.36}`} stroke="#9a5a44" strokeWidth={0.8} fill="none" />
-      <circle cx={b.headR * 0.2} cy={b.headR * 0.25} r={1.6} fill="#e89a8a" opacity={0.45} />
+      <Face r={b.headR} emotion={emotion} />
       {children}
     </g>
   )
 }
 
-function Mio({ age }: { age: number }) {
+const EYE = '#3a2e26'
+const LIP = '#9a5a44'
+
+/**
+ * The face, in a three-quarter view looking right, as before — now with a mood.
+ * Kept to a few strokes so it reads at the size of a thumbnail.
+ */
+export function Face({ r, emotion }: { r: number; emotion: Emotion }) {
+  const ex = [r * 0.32, r * 0.72]
+  const ey = -r * 0.05
+  const mx = r * 0.55
+  const my = r * 0.42
+  const brow = (x: number, dy: number, tilt: number) =>
+    <line x1={x - 1.3} y1={ey - 2.4 + dy - tilt} x2={x + 1.3} y2={ey - 2.4 + dy + tilt} stroke={EYE} strokeWidth={0.7} strokeLinecap="round" />
+  let eyes: React.ReactNode
+  let extra: React.ReactNode = null
+  let mouth: React.ReactNode
+  let cheek = 0.45
+  switch (emotion) {
+    case 'happy':
+      eyes = ex.map((x) => <path key={x} d={`M ${x - 1.2} ${ey + 0.5} Q ${x} ${ey - 1.4} ${x + 1.2} ${ey + 0.5}`} stroke={EYE} strokeWidth={0.8} fill="none" strokeLinecap="round" />)
+      mouth = <path d={`M ${mx - 1.9} ${my - 0.4} Q ${mx} ${my + 2.6} ${mx + 1.9} ${my - 0.4} Z`} fill="#8a3e33" />
+      cheek = 0.7
+      break
+    case 'surprised':
+      eyes = ex.map((x) => <circle key={x} cx={x} cy={ey} r={1.35} fill={EYE} />)
+      extra = ex.map((x) => <path key={x} d={`M ${x - 1.3} ${ey - 2.6} Q ${x} ${ey - 3.8} ${x + 1.3} ${ey - 2.6}`} stroke={EYE} strokeWidth={0.6} fill="none" />)
+      mouth = <ellipse cx={mx} cy={my + 0.4} rx={1} ry={1.3} fill="#6b3a2e" />
+      break
+    case 'confused':
+      eyes = [<circle key="a" cx={ex[0]} cy={ey} r={0.95} fill={EYE} />, <circle key="b" cx={ex[1]} cy={ey + 0.2} r={0.7} fill={EYE} />]
+      extra = <>{brow(ex[0], -0.9, -0.5)}{brow(ex[1], 0.4, 0)}</>
+      mouth = <path d={`M ${mx - 1.6} ${my} q 0.8 -0.9 1.6 0 t 1.6 0`} stroke={LIP} strokeWidth={0.75} fill="none" />
+      break
+    case 'frustrated':
+      eyes = ex.map((x) => <circle key={x} cx={x} cy={ey + 0.2} r={0.9} fill={EYE} />)
+      // brows angled down towards the nose
+      extra = <>{brow(ex[0], 0.5, 0.5)}{brow(ex[1], 0.5, -0.5)}</>
+      mouth = <path d={`M ${mx - 1.6} ${my + 0.6} Q ${mx} ${my - 0.7} ${mx + 1.6} ${my + 0.6}`} stroke={LIP} strokeWidth={0.85} fill="none" />
+      cheek = 0.65
+      break
+    case 'tired':
+      eyes = ex.map((x) => <path key={x} d={`M ${x - 1.2} ${ey} Q ${x} ${ey + 1.1} ${x + 1.2} ${ey}`} stroke={EYE} strokeWidth={0.8} fill="none" strokeLinecap="round" />)
+      extra = ex.map((x) => <path key={x} d={`M ${x - 1} ${ey + 1.7} Q ${x} ${ey + 2.3} ${x + 1} ${ey + 1.7}`} stroke="#b88f78" strokeWidth={0.5} fill="none" />)
+      mouth = <line x1={mx - 1} y1={my + 0.2} x2={mx + 1} y2={my + 0.3} stroke={LIP} strokeWidth={0.75} strokeLinecap="round" />
+      cheek = 0.2
+      break
+    case 'bored':
+      // eyes rolled up and half-lidded, looking away
+      eyes = ex.map((x) => <g key={x}><circle cx={x + 0.3} cy={ey - 0.4} r={0.85} fill={EYE} /><line x1={x - 1.2} y1={ey - 0.9} x2={x + 1.2} y2={ey - 0.9} stroke={EYE} strokeWidth={0.7} /></g>)
+      mouth = <line x1={mx - 1.5} y1={my + 0.2} x2={mx + 1.5} y2={my + 0.2} stroke={LIP} strokeWidth={0.8} strokeLinecap="round" />
+      cheek = 0.3
+      break
+    default:
+      eyes = ex.map((x) => <circle key={x} cx={x} cy={ey} r={0.95} fill={EYE} />)
+      mouth = <path d={`M ${r * 0.35} ${r * 0.38} Q ${r * 0.55} ${r * 0.5} ${r * 0.75} ${r * 0.36}`} stroke={LIP} strokeWidth={0.8} fill="none" />
+  }
+  return (
+    <g className={`face face-${emotion}`}>
+      <g className="eyes">{eyes}</g>
+      {extra}
+      {mouth}
+      <circle cx={r * 0.2} cy={r * 0.25} r={1.6} fill="#e89a8a" opacity={cheek} />
+    </g>
+  )
+}
+
+function Mio({ age, emotion }: { age: number; emotion: Emotion }) {
   const p = { id: 'mio' } as Person
   const b = proportions(p, age)
   const top = -b.legH - b.bodyH
@@ -91,7 +160,7 @@ function Mio({ age }: { age: number }) {
         <Legs b={b} color="#4a5a7a" boots="#d2452f" />
         <Coat b={b} color="#f2c230" shade="#c99a14" />
         <line x1={-6} y1={top + 4} x2={-3} y2={top + 15} stroke="#a26f0c" strokeWidth={1.4} />
-        <Head b={b} hair={<path d={`M ${-r - 2} 1 Q ${-r - 2} ${-r - 3} 0 ${-r - 3} Q ${r + 2} ${-r - 3} ${r + 1.5} -1 L ${r - 1} -2 Q 0 ${-r + 2} ${-r + 1} 2 Z`} fill="#f2c230" />} />
+        <Head b={b} emotion={emotion} hair={<path d={`M ${-r - 2} 1 Q ${-r - 2} ${-r - 3} 0 ${-r - 3} Q ${r + 2} ${-r - 3} ${r + 1.5} -1 L ${r - 1} -2 Q 0 ${-r + 2} ${-r + 1} 2 Z`} fill="#f2c230" />} />
       </g>
     )
   }
@@ -103,7 +172,7 @@ function Mio({ age }: { age: number }) {
         <Legs b={b} color="#2f3542" boots="#f2f2ee" />
         <Coat b={b} color="#f0bd2c" shade="#c99a14" />
         <path d={`M -4 ${top + 3} Q 0 ${top + 7} 4 ${top + 3}`} stroke="#c99a14" strokeWidth={1.2} fill="none" />
-        <Head b={b} hair={<path d={`M ${-r - 1} 0 Q ${-r} ${-r - 3} ${r * 0.3} ${-r - 2} Q ${r + 1.5} ${-r} ${r + 0.5} -2 L ${-r} 2 Z`} fill="#4a3426" />}>
+        <Head b={b} emotion={emotion} hair={<path d={`M ${-r - 1} 0 Q ${-r} ${-r - 3} ${r * 0.3} ${-r - 2} Q ${r + 1.5} ${-r} ${r + 0.5} -2 L ${-r} 2 Z`} fill="#4a3426" />}>
           {teen && (
             <g>
               <path d={`M ${-r - 1.2} 0 Q 0 ${-r * 2 - 1} ${r + 1.2} 0`} stroke="#222" strokeWidth={1.6} fill="none" />
@@ -122,12 +191,12 @@ function Mio({ age }: { age: number }) {
       <Coat b={b} color={age < 26 ? '#6c7a5a' : '#c8952a'} long={3} shade="#2a2a2a" />
       <path d={`M -6 ${top + 2} Q 0 ${top + 7} 6 ${top + 2} L 5 ${top + 14} L 2 ${top + 13} L 3 ${top + 5} Q 0 ${top + 6} -5 ${top + 4} Z`} fill="#f2c230" />
       {age < 26 && <rect x={6} y={top + 13} width={7} height={9} rx={1} fill="#7a3b2e" transform={`rotate(12 ${9} ${top + 17})`} />}
-      <Head b={b} hair={<path d={`M ${-r - 1} 1 Q ${-r} ${-r - 3} ${r * 0.3} ${-r - 2} Q ${r + 1.5} ${-r} ${r + 0.5} -2 L ${-r} 3 Z`} fill="#4a3426" />} />
+      <Head b={b} emotion={emotion} hair={<path d={`M ${-r - 1} 1 Q ${-r} ${-r - 3} ${r * 0.3} ${-r - 2} Q ${r + 1.5} ${-r} ${r + 0.5} -2 L ${-r} 3 Z`} fill="#4a3426" />} />
     </g>
   )
 }
 
-function Lena({ age, year, graduating }: { age: number; year: number; graduating: boolean }) {
+function Lena({ age, year, graduating, emotion }: { age: number; year: number; graduating: boolean; emotion: Emotion }) {
   const p = { id: 'lena' } as Person
   const b = proportions(p, age)
   const top = -b.legH - b.bodyH
@@ -151,7 +220,7 @@ function Lena({ age, year, graduating }: { age: number; year: number; graduating
       {student
         ? <rect x={6} y={top + 11} width={6} height={8} rx={0.8} fill="#c2453a" transform={`rotate(-14 9 ${top + 15})`} />
         : !parent && <rect x={7} y={top + 12} width={8} height={10} rx={1.5} fill="#d8c7a2" />}
-      <Head b={b} hair={hair}>
+      <Head b={b} hair={hair} emotion={emotion}>
         {graduating && (
           <g className="cap-toss">
             <polygon points={`${-r - 3},${-r - 1} 0,${-r - 5} ${r + 3},${-r - 1} 0,${-r + 2}`} fill="#1d1d24" />
@@ -187,7 +256,7 @@ function Pram({ year }: { year: number }) {
   )
 }
 
-function Roth({ age }: { age: number }) {
+function Roth({ age, emotion }: { age: number; emotion: Emotion }) {
   const p = { id: 'roth' } as Person
   const b = proportions(p, age)
   const top = -b.legH - b.bodyH
@@ -200,7 +269,7 @@ function Roth({ age }: { age: number }) {
       <g transform={`rotate(${stoop} 0 ${-b.legH})`}>
         <Coat b={b} color="#8a5a3c" long={6} shade="#5e3a24" />
         <path d={`M -7 ${top + 3} Q 0 ${top + 8} 7 ${top + 3}`} stroke="#c2a07a" strokeWidth={2} fill="none" />
-        <Head b={b} hair={<ellipse cx={-r * 0.55} cy={-r * 0.7} rx={r * 0.45} ry={r * 0.4} fill="#d8d4cc" />}>
+        <Head b={b} emotion={emotion} hair={<ellipse cx={-r * 0.55} cy={-r * 0.7} rx={r * 0.45} ry={r * 0.4} fill="#d8d4cc" />}>
           <ellipse cx={0} cy={-r * 0.55} rx={r + 4} ry={2.4} fill="#6e4429" />
           <path d={`M ${-r + 1} ${-r * 0.55} Q 0 ${-r * 2} ${r - 1} ${-r * 0.55} Z`} fill="#7c4e30" />
           <rect x={-r + 1} y={-r * 0.9} width={r * 2 - 2} height={1.6} fill="#b5523b" />
@@ -222,11 +291,11 @@ function Roth({ age }: { age: number }) {
 }
 
 /** Just the drawn person, at a given age — shared by the city and the selector portraits. */
-export function Figure({ person, year, graduating = false }: { person: Person; year: number; graduating?: boolean }) {
+export function Figure({ person, year, graduating = false, emotion = 'calm' }: { person: Person; year: number; graduating?: boolean; emotion?: Emotion }) {
   const age = ageOf(person, year)
-  if (person.id === 'mio') return <Mio age={age} />
-  if (person.id === 'lena') return <Lena age={age} year={year} graduating={graduating} />
-  return <Roth age={age} />
+  if (person.id === 'mio') return <Mio age={age} emotion={emotion} />
+  if (person.id === 'lena') return <Lena age={age} year={year} graduating={graduating} emotion={emotion} />
+  return <Roth age={age} emotion={emotion} />
 }
 
 interface Props {
@@ -239,11 +308,12 @@ interface Props {
   ring: boolean
   passing: boolean
   graduating: boolean
+  emotion: Emotion
   onPick: () => void
   onHover: (on: boolean) => void
 }
 
-export function Character({ person, year, selected, hovered, dim, indicator, ring, passing, graduating, onPick, onHover }: Props) {
+export function Character({ person, year, selected, hovered, dim, indicator, ring, passing, graduating, emotion, onPick, onHover }: Props) {
   const age = ageOf(person, year)
   const s = figureScale(person, year) * ZOOM
   const h = figureHeight(person, year)
@@ -251,6 +321,13 @@ export function Character({ person, year, selected, hovered, dim, indicator, rin
   const stage = stageOf(person, year).stage
   // the old move slowly; children cannot keep still
   const idle = person.id === 'roth' ? 2.6 + (age - 71) * 0.12 : person.id === 'mio' && age < 11 ? 0.9 : 2.2
+  // how they hold themselves this year; calm keeps the old idle rhythm
+  const little = person.id === 'mio' && age < 11
+  const body = emotion === 'calm' ? (little ? 'hop' : 'bob') : `emo-${emotion}`
+  const pace = emotion === 'calm' ? idle : (EMOTION_PACE[emotion] ?? 2) * (person.id === 'roth' ? 1.4 : little ? 0.8 : 1)
+  // blinks are out of step with each other, as people's are
+  const blinkDelay = { mio: 0.4, lena: 2.1, roth: 3.3 }[person.id]
+  const glyph = EMOTION_GLYPH[emotion]
   return (
     <g transform={`translate(${x.toFixed(1)},${y.toFixed(1)})`}
       className={`character ch-${person.id} st-${stage} ${selected ? 'is-selected' : ''} ${hovered ? 'is-hovered' : ''} ${dim ? 'is-dim' : ''} ${passing ? 'passing' : ''}`}
@@ -262,13 +339,18 @@ export function Character({ person, year, selected, hovered, dim, indicator, rin
       <ellipse className="ch-shadow" cx={0} cy={0} rx={13 * s + 3} ry={4 * s + 1.5} />
       <ellipse className="ch-halo" cx={0} cy={0} rx={18 * s + 6} ry={6.5 * s + 2.5} style={{ stroke: ACCENT[person.id] }} />
       <g className="ch-scale" style={{ transform: `scale(${s})` }}>
-        <g className={`ch-idle ${person.id === 'mio' && age < 11 ? 'hop' : 'bob'}`} style={{ animationDuration: `${idle}s` }}>
-          <Figure person={person} year={year} graduating={graduating} />
+        <g className={`ch-idle ${body}`} style={{ animationDuration: `${pace.toFixed(2)}s`, ['--blink-delay' as string]: `${blinkDelay}s` }}>
+          <Figure person={person} year={year} graduating={graduating} emotion={emotion} />
         </g>
       </g>
       {passing && (
         <g className="leaves">
           {[-14, -2, 9, 18].map((dx, i) => <ellipse key={i} className="leaf" cx={dx} cy={-h - 20} rx={2.6} ry={1.4} style={{ animationDelay: `${i * 0.35}s` }} />)}
+        </g>
+      )}
+      {glyph && !passing && (
+        <g transform={`translate(${(12 * s + 6).toFixed(1)},${(-h + 4).toFixed(1)})`}>
+          <text className={`emote emote-${emotion}`} textAnchor="middle" key={`${emotion}${year}`}>{glyph}</text>
         </g>
       )}
       <rect className="ch-hit" x={-24} y={-h - 14} width={48} height={h + 30} />
