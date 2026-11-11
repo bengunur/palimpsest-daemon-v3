@@ -2,6 +2,8 @@
 
 *A design-research prototype for Bauhaus-Universität Weimar.*
 
+**Author:** Bengü Nur Öz · **Course:** Nonsense Project (Daemons), Bauhaus-Universität Weimar, 2026 · also AI in Design, Homework 2
+
 One small public square, **Kleiner Ilmplatz** (a fictional, Weimar-inspired square), is shared by three people who see it as different, overlapping realities. **Mio** (7, yellow raincoat) wants a playground. **Lena** (24, blue backpack) wants a quiet study garden. **Frau Roth** (71, brown coat and cane) wants the old garden back.
 
 An invisible urban daemon, **Der Langsame** ("the Slow One"), listens to the square, remembers it, and decides on its own how to change it. **Nothing it does takes under a year.** By the time a decision becomes stone and soil, the person who asked for it has often graduated, moved away or died. Over time the square becomes a palimpsest of delayed answers to past realities.
@@ -149,3 +151,9 @@ npm run build     # production build (GITHUB_PAGES=1 for the Pages base path)
 
 - **Nonsense Project.** Theme: *people experience one city as overlapping realities*. Three characters project their own imagined realities as translucent visions onto the same physical plots. Constraint: *the daemon is slow; nothing it does takes under a year*. This is enforced in the validator, the engine and the tests, and made visible by building sites with progress signs, characters visibly aging during the wait, and reactions shaped by who each person has become.
 - **AI in Design, HW2.** The local `claude -p` endpoint uses the required flags and a strict JSON schema, with a system prompt defining motives, perception, limits and personality. Every decision is validated twice, the model thinks only on meaningful events, its reasoning is shown on a decision card and in the history drawer, and simulated decisions are clearly labelled.
+
+## Credits
+
+- Concept, design, characters, art and code: Bengü Nur Öz.
+- All illustrations are hand-drawn SVG and CSS, and the music is generated in code. Fonts: Fraunces, IBM Plex Mono and Caveat via Google Fonts (SIL Open Font License).
+- AI: Claude (Anthropic) makes the live daemon's decisions and was used as a coding assistant. Its commits are marked `Co-Authored-By`.
